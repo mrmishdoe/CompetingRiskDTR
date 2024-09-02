@@ -33,7 +33,7 @@ aft_lmm = function(data, treat.mod, cens.mod, outcome.mod, cause){
 }
 
 #aft function with GEE's
-aft = function(data, treat.mod, cens.mod, outcome.mod, cause){
+aft = function(data, treat.mod, cens.mod, outcome.mod, cause, corstr = "exchangeable"){
   
   #Treatment model and censoring model 
   treat_mod = glm(treat.mod, data = data, family = binomial)
@@ -55,7 +55,7 @@ aft = function(data, treat.mod, cens.mod, outcome.mod, cause){
   #Fitting GEE with exchangeable correlation structure, geeM package requires data.frame
   
   data = data %>% arrange(group) %>% as.data.frame()
-  model = geem(formula = outcome.mod, data = data, weights = w, id = group, corstr = "exchangeable")
+  model = geem(formula = outcome.mod, data = data, weights = w, id = group, corstr = corstr)
   
   #Get main effect and interactions with treatment (all named elements of vector containing a)
   coefs = coef(model)
@@ -63,19 +63,30 @@ aft = function(data, treat.mod, cens.mod, outcome.mod, cause){
   coefs[grepl("a", names(coefs), fixed = T)]
 }
 
-sim_data = function(n, psi1, psi2, cens = T, treat_clust = F, re_dist = "norm"){
+sim_data = function(n, psi1, psi2, cens = T, treat_clust = F, re_dist = "norm", binX = F, total_var = 0.5, ICC = 0.5, nclust = 10, cens_low = T, treat_re= "medium"){
   #Covariates
-  #x <- rnorm(n, 0, 1) #was = 2 initially
-  x<- rbinom(n,1, 0.5) #can put this as an option
+  x <- rnorm(n, 0, 1)
+  
+  #Option for binary effect modifier
+  if(binX){
+    x<- rbinom(n,1, 0.5)
+    }
+  
   z = rnorm(n, 0, 2)
   
   #Clustering in treatment and outcome (we assume that clustering variable is the same)
-  nclust = 10
   group = sample(nclust, n, replace = T)
   
+  #Decomposition of total variance = tau^2 + sigma^2 
+  tau = sqrt(total_var*ICC)
+  sigma = sqrt(total_var - tau^2)
+    
   #Clustering in the treatment allocation
   if(treat_clust){
-    treat_effects = rnorm(nclust, mean = 0, sd = 0.5)
+    #standard deviation of treatment random effect
+    sd_treat= case_when(treat_re == "low" ~ 0.1, treat_re == "medium" ~ 0.5, treat_re == "high"~1)
+    
+    treat_effects = rnorm(nclust, mean = 0, sd = sd_treat)
     ind_treat_effects = map_dbl(group, function(x) treat_effects[x])
     a <- rbinom(n, 1, expit(0.5 + x +z + ind_treat_effects))
   } else{
@@ -88,23 +99,23 @@ sim_data = function(n, psi1, psi2, cens = T, treat_clust = F, re_dist = "norm"){
   
   #Generate groups and random intercepts for each group
   if(re_dist == "norm"){
-    rand_effects = rnorm(nclust, mean = 0, sd = 0.5)
+    rand_effects = rnorm(nclust, mean = 0, sd = tau)
   } else if(re_dist == "gamma"){
-    rand_effects = rgamma(nclust, shape = 0.25) - 0.25
+    rand_effects = rgamma(nclust, shape = tau^2) - tau^2
   }
   
   ind_effects = map_dbl(group, function(x) rand_effects[x])
   
   #Parameters for generating outcomes
-  beta1 <- c(1, 0.5, -0.3)
+  beta1 <- c(1, 0.1, -0.3) #1, 0.5
   h1beta <- model.matrix(~x + z)
   h1psi <- model.matrix(~x)
-  err1 = rnorm(sum(epsilon == 1),sd = 0.5)
+  err1 = rnorm(sum(epsilon == 1),sd = sigma)
   
-  beta2 <- c(2, -0.1,0.2)
+  beta2 <- c(2, -0.1,0.2) #2, -0.1
   h2beta <- model.matrix(~x + z)
   h2psi <- model.matrix(~x)
-  err2 = rnorm(sum(epsilon == 2),sd = 0.5)
+  err2 = rnorm(sum(epsilon == 2),sd = sigma)
   
   #Generate counterfactuals for evaluating regimes
   T1_0 = exp(h1beta[epsilon== 1, ] %*% beta1 + ind_effects[epsilon ==1]+ err1)
@@ -128,7 +139,8 @@ sim_data = function(n, psi1, psi2, cens = T, treat_clust = F, re_dist = "norm"){
   
   #Replace times by censoring time for those who were censored
   if(cens){  
-    delta <- rbinom(n, 1, expit(-x +1.9-0.3*z))
+    intercept = ifelse(cens_low, 1.73, 0)
+    delta <- rbinom(n, 1, expit(intercept-x -0.3*z)) #1.73 for 20% censoring, 0 for 50% censoring
     C <- rexp(n, 1/300)
     data = data %>% mutate(Y = ifelse(delta,Y,C), delta = delta)
   }
@@ -148,7 +160,7 @@ eval_DTR = function(train, test, psi1, psi2, psi1_hat, psi2_hat){
   
   #Model for probability of failing from cause 1
   cause_data = train %>% filter(delta == 1) %>% mutate(ind = as.numeric(epsilon ==1))
-  cause_mod = glm(ind~ x+z, data = cause_data, family = binomial)
+  cause_mod = glm(ind~ x, data = cause_data, family = binomial)
   
   #Get the optimal regime depending on true underlying cause
   #Note : have to make sure this works the way i think it does
@@ -168,8 +180,10 @@ eval_DTR = function(train, test, psi1, psi2, psi1_hat, psi2_hat){
   
   #Compute mean log survival time under both regimes given true data generating values of beta/psi
   test = test %>% mutate(T_w =opt_weighted*T_1 + (1-opt_weighted)*T_0, T_g = opt_greedy*T_1 + (1-opt_greedy)*T_0)
-  mean_value_w = mean(log(test$T_w))
-  mean_value_g = mean(log(test$T_g))
+  
+  #For now, remove the log (so estimating the value based on survival time instead of log survival time)
+  mean_value_w = mean(test$T_w)
+  mean_value_g = mean(test$T_g)
   
   list(weighted = list(pot = pot_w, value = mean_value_w, blip = test$blip_weighted), greedy = list(pot = pot_g, value = mean_value_g, blip = test$blip_greedy))
 }
@@ -218,4 +232,125 @@ plot_results = function(test, weighted_blips, greedy_blips){
   blip_plot=ggarrange(w_plots$p1, g_plots$p1 ,w_plots$p2, g_plots$p2, ncol = 2, nrow = 2, common.legend = T, legend = "right")
   
   blip_plot
+}
+
+
+
+simAFT = function(n_rep, n_train, n_test, psi1, psi2, models, corstr = "exchangeable", ...){
+  
+  #Generate test set
+  test = sim_data(n_test, psi1, psi2, cens = F, ...)
+  
+  #Initialize raw result list
+  raw = list()
+  for(name in names(models)){
+    raw[[name]] = list(psi1_hat = NULL, psi2_hat = NULL,metrics = list(weighted = list(pot = NULL, value = NULL, blip = NULL), greedy = list(pot =NULL, value = NULL, blip =NULL)))
+  }
+  
+  #Main loop
+  for(i in 1:n_rep){
+    
+    #Generate training set for estimating blip parameters
+    train = sim_data(n_train, psi1, psi2, ...)
+    
+    #Estimate parameters for every model in list 
+    for (name in names(models)){
+      model = models[[name]]
+      psi1_hat = aft(train, model$treat, model$cens, model$out,1, corstr)
+      psi2_hat = aft(train, model$treat, model$cens, model$out,2, corstr)
+      res_DTR = eval_DTR(train, test, psi1, psi2, psi1_hat, psi2_hat)
+      
+      cur = raw[[name]]
+      updated_metrics = list(weighted = update_metrics(cur$metrics, res_DTR, "weighted"), greedy = update_metrics(cur$metrics, res_DTR, "greedy"))
+      raw[[name]] = list(psi1_hat = rbind(cur$psi1_hat, psi1_hat), psi2_hat = rbind(cur$psi2_hat, psi2_hat), metrics = updated_metrics)
+    }
+    
+    
+  }
+  
+  #Final results
+  res = list()
+  
+  #Initialize boxplots
+  p0 = ggplot() + xlab("Model Specification")
+  p1 = p0 + geom_hline(yintercept = psi1[1], linetype = 2) + labs(y = expression(hat(psi)[11]))
+  p2 = p0 + geom_hline(yintercept = psi1[2], linetype = 2) + labs(y = expression(hat(psi)[12]))
+  p3 = p0 + geom_hline(yintercept = psi2[1], linetype = 2) + labs(y = expression(hat(psi)[21]))
+  p4 = p0 + geom_hline(yintercept = psi2[2], linetype = 2) + labs(y = expression(hat(psi)[22]))
+  
+  
+  #Combine results across all iterations
+  for(name in names(models)){
+    
+    #Blip plots
+    metrics = raw[[name]]$metrics
+    res[[name]]$blip_plot = plot_results(test, metrics$weighted$blip, metrics$greedy$blip)
+    
+    #POT and value
+    #Optimal value with known cause of failure (for comparison)
+    test = test %>% mutate(T_opt = opt*T_1 + (1-opt)*T_0)
+    
+    #Value with random assignment of treatment
+    test = test %>% mutate(opt_rand = rbinom(n_test, 1, 0.5), T_rand = opt_rand*T_1 + (1-opt_rand)*T_0)
+      
+    res[[name]]$measures = list(weighted = c(POT = mean(metrics$weighted$pot), Value = mean(metrics$weighted$value) ), 
+                                greedy = c(POT = mean(metrics$greedy$pot), Value = mean(metrics$greedy$value) ), 
+                                Opt_Value = mean(test$T_opt), Rand_Value= mean(test$T_rand))
+    
+    #Bias and SE for parameter estimates
+    res[[name]]$inference = bias_SE(cbind(raw[[name]]$psi1_hat, raw[[name]]$psi2_hat), c(psi1, psi2))
+      
+    #Box plots for parameters
+      
+    #generate
+    p1 = p1 + geom_boxplot(data = raw[[name]]$psi1_hat[,1] %>% as_tibble() %>% mutate(scenario = which(names(models) == name)), aes(x = scenario,y = value))
+    p2 = p2 + geom_boxplot(data = raw[[name]]$psi1_hat[,2] %>% as_tibble() %>% mutate(scenario = which(names(models) == name)), aes(x = scenario,y = value))
+    p3 = p3 + geom_boxplot(data = raw[[name]]$psi2_hat[,1] %>% as_tibble() %>% mutate(scenario = which(names(models) == name)), aes(x = scenario,y = value))
+    p4 = p4 + geom_boxplot(data = raw[[name]]$psi2_hat[,2] %>% as_tibble() %>% mutate(scenario = which(names(models) == name)), aes(x = scenario,y = value))
+      
+      
+  }
+  
+  #Add boxplots to final res
+  res$boxplots = list(p1, p2, p3,p4)
+  
+  #Return result list
+  res
+}
+
+#Function to print output of AFT simulations
+print_res = function(res, name, save= F, boxplot = F){
+  
+  #Save raw results
+  if(save){
+    saveRDS(res, file = paste("raw_results/",name,".rds", sep = ""))
+  }
+  
+  #For each model, print out all info
+  for(i in 1:(length(res) - 1) ){
+    mod_name = names(res)[i]
+    mod_list = res[[mod_name]]
+    
+    print(mod_list$blip_plot)
+    print(mod_list$measures)
+    print(mod_list$inference)
+    
+    #Save blip plot
+    if(save){
+      ggsave(paste("plots/", name, "_" ,mod_name, ".png",  sep = ""), mod_list$blip_plot, width=12, height = 12)
+    }
+  }
+  
+  if(boxplot){
+    #Print boxplots
+    for(i in 1:length(res$boxplots)){
+      print(res$boxplots[[i]])
+      
+      if(save){
+        ggsave(paste("plots/", name, "_box", i, ".png",  sep = ""), res$boxplots[[i]], width=12, height = 12)
+      }
+    }
+    
+  }
+  
 }
