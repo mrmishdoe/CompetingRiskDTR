@@ -63,7 +63,7 @@ aft = function(data, treat.mod, cens.mod, outcome.mod, cause, corstr = "exchange
   coefs[grepl("a", names(coefs), fixed = T)]
 }
 
-sim_data = function(n, psi1, psi2, cens = T, treat_clust = F, re_dist = "norm", binX = F, total_var = 0.5, ICC = 0.5, nclust = 10, cens_low = T, treat_re= "medium"){
+sim_data = function(n, psi1, psi2, cens = T, treat_clust = F, re_dist = "norm", binX = F, total_var = 0.5, ICC = 0.5, nclust = 50, cens_low = T, treat_re= "medium"){
   #Covariates
   x <- rnorm(n, 0, 1)
   
@@ -107,7 +107,7 @@ sim_data = function(n, psi1, psi2, cens = T, treat_clust = F, re_dist = "norm", 
   ind_effects = map_dbl(group, function(x) rand_effects[x])
   
   #Parameters for generating outcomes
-  beta1 <- c(1, 0.1, -0.3) #1, 0.5
+  beta1 <- c(1, 0.5, -0.3) #1, 0.5
   h1beta <- model.matrix(~x + z)
   h1psi <- model.matrix(~x)
   err1 = rnorm(sum(epsilon == 1),sd = sigma)
@@ -211,11 +211,11 @@ plot_cause = function(test, blips, name){
   dat2 = dat %>% filter(epsilon == 2)
   # Plotting
   
-  colors <- c("Chosen Strategy" = "black", "True Blip" = "red")
+  colors <- c("Chosen Regime" = "black", "Oracle Regime" = "red")
   
-  p1 =ggplot(dat1, aes(x = 1:nrow(dat1))) + geom_ribbon(aes(ymin = lower, ymax = upper), fill = "grey70")+ geom_line(aes(y = mid, color = "Chosen Strategy"), linewidth= 1.2)  + geom_line(aes(y = blip, color = "True Blip"), linewidth = 1.2)+ labs(x="Observation number (Ordered)", y = "Median Difference in Log Survival Time",title ="Cause 1", color = "Legend",caption = name) + theme(plot.title = element_text(face = "bold"), plot.caption = element_text(hjust = 0.5))+scale_color_manual(values = colors)
+  p1 =ggplot(dat1, aes(x = 1:nrow(dat1))) + geom_ribbon(aes(ymin = lower, ymax = upper), fill = "grey70")+ geom_line(aes(y = mid, color = "Chosen Regime"), linewidth= 1.2)  + geom_line(aes(y = blip, color = "Oracle Regime"), linewidth = 1.2)+ labs(x="Observation number (Ordered)", y = "Median Difference in Log Survival Time",title ="Cause 1", color = "Legend",caption = name) + theme(plot.title = element_text(face = "bold"), plot.caption = element_text(hjust = 0.5))+scale_color_manual(values = colors)
   
-  p2 =ggplot(dat2, aes(x = 1:nrow(dat2))) + geom_ribbon(aes(ymin = lower, ymax = upper), fill = "grey70")+ geom_line(aes(y = mid,color = "Chosen Strategy"), linewidth= 1.2)  + geom_line(aes(y = blip, color = "True Blip"), linewidth = 1.2)+ labs(x="Observation number (Ordered)", y = "Median Difference in Log Survival Time",title ="Cause 2",color = "Legend", caption = name) + theme(plot.title = element_text(face = "bold"), plot.caption = element_text(hjust = 0.5))+scale_color_manual(values = colors)
+  p2 =ggplot(dat2, aes(x = 1:nrow(dat2))) + geom_ribbon(aes(ymin = lower, ymax = upper), fill = "grey70")+ geom_line(aes(y = mid,color = "Chosen Regime"), linewidth= 1.2)  + geom_line(aes(y = blip, color = "Oracle Regime"), linewidth = 1.2)+ labs(x="Observation number (Ordered)", y = "Median Difference in Log Survival Time",title ="Cause 2",color = "Legend", caption = name) + theme(plot.title = element_text(face = "bold"), plot.caption = element_text(hjust = 0.5))+scale_color_manual(values = colors)
   
   list(p1 = p1, p2 = p2)
 }
@@ -225,8 +225,8 @@ plot_results = function(test, weighted_blips, greedy_blips){
   
   #Plot results for weighted and greedy strategies
   
-  w_plots = plot_cause(test, weighted_blips, "(a) Weighted strategy")
-  g_plots = plot_cause(test, greedy_blips, "(b) Greedy strategy")
+  w_plots = plot_cause(test, weighted_blips, "(a) Weighted regime")
+  g_plots = plot_cause(test, greedy_blips, "(b) Greedy regime")
   
   #Arrange plots
   blip_plot=ggarrange(w_plots$p1, g_plots$p1 ,w_plots$p2, g_plots$p2, ncol = 2, nrow = 2, common.legend = T, legend = "right")
@@ -278,6 +278,11 @@ simAFT = function(n_rep, n_train, n_test, psi1, psi2, models, corstr = "exchange
   p3 = p0 + geom_hline(yintercept = psi2[1], linetype = 2) + labs(y = expression(hat(psi)[21]))
   p4 = p0 + geom_hline(yintercept = psi2[2], linetype = 2) + labs(y = expression(hat(psi)[22]))
   
+  #Optimal value with known cause of failure (for comparison)
+  test = test %>% mutate(T_opt = opt*T_1 + (1-opt)*T_0)
+  
+  #Value with random assignment of treatment
+  test = test %>% mutate(opt_rand = rbinom(n_test, 1, 0.5), T_rand = opt_rand*T_1 + (1-opt_rand)*T_0)
   
   #Combine results across all iterations
   for(name in names(models)){
@@ -287,12 +292,6 @@ simAFT = function(n_rep, n_train, n_test, psi1, psi2, models, corstr = "exchange
     res[[name]]$blip_plot = plot_results(test, metrics$weighted$blip, metrics$greedy$blip)
     
     #POT and value
-    #Optimal value with known cause of failure (for comparison)
-    test = test %>% mutate(T_opt = opt*T_1 + (1-opt)*T_0)
-    
-    #Value with random assignment of treatment
-    test = test %>% mutate(opt_rand = rbinom(n_test, 1, 0.5), T_rand = opt_rand*T_1 + (1-opt_rand)*T_0)
-      
     res[[name]]$measures = list(weighted = c(POT = mean(metrics$weighted$pot), Value = mean(metrics$weighted$value) ), 
                                 greedy = c(POT = mean(metrics$greedy$pot), Value = mean(metrics$greedy$value) ), 
                                 Opt_Value = mean(test$T_opt), Rand_Value= mean(test$T_rand))
@@ -312,14 +311,16 @@ simAFT = function(n_rep, n_train, n_test, psi1, psi2, models, corstr = "exchange
   }
   
   #Add boxplots to final res
-  res$boxplots = list(p1, p2, p3,p4)
+  #res$boxplots = list(p1, p2, p3,p4)
+  
+  res$boxplots = ggarrange(p1, p2 ,p3, p4, ncol = 2, nrow = 2)
   
   #Return result list
   res
 }
 
 #Function to print output of AFT simulations
-print_res = function(res, name, save= F, boxplot = F){
+print_res = function(res, name, save= F, boxplot = F, n = 1000){
   
   #Save raw results
   if(save){
@@ -333,7 +334,7 @@ print_res = function(res, name, save= F, boxplot = F){
     
     print(mod_list$blip_plot)
     print(mod_list$measures)
-    print(mod_list$inference)
+    print(sqrt(n) * mod_list$inference)
     
     #Save blip plot
     if(save){
@@ -343,12 +344,18 @@ print_res = function(res, name, save= F, boxplot = F){
   
   if(boxplot){
     #Print boxplots
-    for(i in 1:length(res$boxplots)){
-      print(res$boxplots[[i]])
-      
-      if(save){
-        ggsave(paste("plots/", name, "_box", i, ".png",  sep = ""), res$boxplots[[i]], width=12, height = 12)
-      }
+    # for(i in 1:length(res$boxplots)){
+    #   print(res$boxplots[[i]])
+    #   
+    #   if(save){
+    #     ggsave(paste("plots/", name, "_box", i, ".png",  sep = ""), res$boxplots[[i]], width=12, height = 12)
+    #   }
+    # }
+    
+    print(res$boxplots)
+    
+    if(save){
+      ggsave(paste("plots/", name, "_boxplots.png",  sep = ""), res$boxplots, width=12, height = 12)
     }
     
   }

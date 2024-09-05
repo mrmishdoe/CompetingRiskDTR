@@ -13,20 +13,6 @@ source("RandomEffectsAFT.R")
 ```
 
 
-```{r test }
-source("RandomEffectsAFT.R")
-
-#Gives similar performance but not great for ei
-psi1 = c(0.4, -0.4)
-psi2 = c(0.4, 0.4)
-test = sim_data(1000, psi1, psi2, cens = F)
-hist(test$Y)
-
-
-
-
-```
-
 
 ```{r baseline scenario, message = F, warning = F}
 #Baseline scenario with high POT, high value for both regimes
@@ -36,13 +22,14 @@ psi2 = c(0.2, 0.2)
 models = list(both = list(treat = a~x, cens = delta~x, out = log(Y)~ x+ a+a:x), treat = list(treat = a~x, cens = delta~x, out = log(Y)~ x+z+ a+a:x), 
                 out = list(treat = a~x+z, cens = delta~x+z, out = log(Y)~ x+ a+a:x), none = list(treat = a~x+z, cens = delta~x+z, out = log(Y)~ x+z+ a+a:x))
 
+n_rep = 1000
 n_train = 1000
-n_test = 1000
+n_test = 10000
 
 set.seed(2024)
-res_b = simAFT(100, n_train, n_test, psi1, psi2, models)
+res_b = simAFT(n_rep, n_train, n_test, psi1, psi2, models)
 
-print_res(res_b, "baseline", save = F, boxplot = F)
+print_res(res_b, "baseline", save = T, boxplot = T)
 ```
 
 ```{r baseline scenario 2, message = F, warning = F}
@@ -54,14 +41,16 @@ models = list(both = list(treat = a~x, cens = delta~x, out = log(Y)~ x+ a+a:x), 
                 out = list(treat = a~x+z, cens = delta~x+z, out = log(Y)~ x+ a+a:x), none = list(treat = a~x+z, cens = delta~x+z, out = log(Y)~ x+z+ a+a:x))
 
 #5x sample size so approx half the SE
+n_rep = 1000
 n_train = 5000
 n_test = 10000
 
 set.seed(2024)
-res_b2 = simAFT(100, n_train, n_test, psi1, psi2, models)
+res_b2 = simAFT(n_rep, n_train, n_test, psi1, psi2, models, nclust = 250)
 
-print_res(res_b2, "baseline2", save = T, boxplot = T)
+print_res(res_b2, "baseline2", save = T, boxplot = T, n = n_train)
 ```
+
 
 ```{r scenario 1, warning=F,fig.width= 10, fig.height=10}
 
@@ -74,15 +63,14 @@ psi2 = c(-1, 0.2)
 
 models = list(none = list(treat = a~x+z, cens = delta~x+z, out = log(Y)~ x+z+ a+a:x))
 
-set.seed(2024)
-res_s1 = simAFT(100, 1000, 1000, psi1, psi2, models)
+n_rep = 1000
+n_train = 1000
+n_test = 10000
 
-#Save output
-saveRDS(res_s1, file = "raw_results/s1.rds")
+set.seed(2023)
+res_s1 = simAFT(n_rep, n_train,n_test , psi1, psi2, models)
 
-res_s1$none$blip_plot
-res_s1$none$measures
-#ggsave("blip.png", r, width=12, height = 12)
+print_res(res_s1, "s1", save = T, boxplot = F)
 ```
 
 
@@ -97,15 +85,14 @@ psi2= c(0.1, 0.08)
 
 models = list(none = list(treat = a~x+z, cens = delta~x+z, out = log(Y)~ x+z+ a+a:x))
 
+n_rep = 1000
+n_train = 1000
+n_test = 10000
+
 set.seed(2024)
-res_s2 = simAFT(100, 1000, 1000, psi1, psi2, models)
+res_s2 = simAFT(n_rep, n_train, n_test, psi1, psi2, models)
 
-#Save output
-saveRDS(res_s2, file = "raw_results/s2.rds")
-
-res_s2$none$blip_plot
-res_s2$none$measures
-#ggsave("blip.png", r, width=12, height = 12)
+print_res(res_s2, "s2", save = T, boxplot = F)
 
 ```
 
@@ -122,18 +109,14 @@ psi2= c(-0.6, -0.6)
 
 models = list(none = list(treat = a~x+z, cens = delta~x+z, out = log(Y)~ x+z+ a+a:x))
 
+n_rep = 1000
+n_train = 1000
+n_test = 10000
+
 set.seed(2024)
-res_s3 = simAFT(100,1000, 1000, psi1, psi2, models, total_var = 1)
+res_s3 = simAFT(n_rep,n_train, n_test, psi1, psi2, models, total_var = 1)
 
-#Save output
-saveRDS(res_s3, file = "raw_results/s3.rds")
-
-res_s3$none$blip_plot
-res_s3$none$measures
-res_s3$none$inference
-#ggsave("blip.png", r, width=12, height = 12)
-
-
+print_res(res_s3, "s3", save = T, boxplot = F)
 ```
 
 
@@ -148,27 +131,19 @@ psi2= c(-0.6, -0.6)
 
 models = list(none = list(treat = a~x+z, cens = delta~x+z, out = log(Y)~ x+z+ a+a:x))
 
-set.seed(2024)
-res_s4_1 = simAFT(100, 1000, 1000, psi1, psi2, models,total_var = 1 , ICC = 0.9)
-
-#Save output
-saveRDS(res_s4_1, file = "raw_results/s4_1.rds")
-
-res_s4_1$none$blip_plot
-res_s4_1$none$measures
-res_s4_1$none$inference
-#ggsave("blip.png", r, width=12, height = 12)
-
+n_rep = 1000
+n_train = 1000
+n_test = 10000
 
 set.seed(2024)
-res_s4_2 = simAFT(100, 1000, 1000, psi1, psi2, models,total_var = 1 , ICC = 0.1)
+res_s4_1 = simAFT(n_rep, n_train, n_test, psi1, psi2, models,total_var = 1 , ICC = 0.9)
 
-#Save output
-saveRDS(res_s4_2, file = "raw_results/s4_2.rds")
+print_res(res_s4_1, "s4_1", save = T, boxplot = F)
 
-res_s4_2$none$blip_plot
-res_s4_2$none$measures
-res_s4_2$none$inference
+set.seed(2024)
+res_s4_2 = simAFT(n_rep, n_train, n_test, psi1, psi2, models,total_var = 1 , ICC = 0.1)
+
+print_res(res_s4_2, "s4_2", save = T, boxplot = F)
 ```
 
 ```{r scenario 5 different error distribution}
@@ -182,15 +157,14 @@ psi2= c(-0.6, -0.6)
 
 models = list(none = list(treat = a~x+z, cens = delta~x+z, out = log(Y)~ x+z+ a+a:x))
 
+n_rep = 1000
+n_train = 1000
+n_test = 10000
+
 set.seed(2024)
-res_s5 = simAFT(100,1000, 1000, psi1, psi2, models, total_var = 1, re_dist = "gamma")
+res_s5 = simAFT(n_rep, n_train, n_test, psi1, psi2, models, total_var = 1, re_dist = "gamma")
 
-#Save output
-saveRDS(res_s5, file = "raw_results/s5.rds")
-
-res_s5$none$blip_plot
-res_s5$none$measures
-res_s5$none$inference
+print_res(res_s5, "s5", save = T, boxplot = F)
 ```
 
 ```{r scenario 6 different level of censoring}
@@ -202,15 +176,14 @@ psi2= c(-0.6, -0.6)
 
 models = list(none = list(treat = a~x+z, cens = delta~x+z, out = log(Y)~ x+z+ a+a:x))
 
+n_rep = 1000
+n_train = 1000
+n_test = 10000
+
 set.seed(2024)
-res_s6 = simAFT(100,1000, 1000, psi1, psi2, models, total_var = 1, cens_low = F)
+res_s6 = simAFT(n_rep, n_train, n_test, psi1, psi2, models, total_var = 1, cens_low = F)
 
-#Save output
-saveRDS(res_s6, file = "raw_results/s6.rds")
-
-res_s6$none$blip_plot
-res_s6$none$measures
-res_s6$none$inference
+print_res(res_s6, "s6", save = T, boxplot = F)
 ```
 
 ```{r scenario 7 ignoring clustering}
@@ -222,17 +195,14 @@ psi2= c(-0.6, -0.6)
 
 models = list(none = list(treat = a~x+z, cens = delta~x+z, out = log(Y)~ x+z+ a+a:x))
 
+n_rep = 1000
+n_train = 1000
+n_test = 10000
+
 set.seed(2024)
-res_s7 = simAFT(100,1000, 1000, psi1, psi2, models, total_var = 1, corstr = "independence")
+res_s7 = simAFT(n_rep, n_train, n_test, psi1, psi2, models, total_var = 1, corstr = "independence")
 
-#Save output
-saveRDS(res_s7, file = "raw_results/s7.rds")
-
-res_s7$none$blip_plot
-res_s7$none$measures
-res_s7$none$inference
-#ggsave("blip.png", r, width=12, height = 12)
-
+print_res(res_s7, "s7", save = T, boxplot = F)
 ```
 
 ```{r scenario 8 clustering in the treatment allocation}
@@ -243,89 +213,29 @@ psi2= c(-0.6, -0.6)
 
 models = list(none = list(treat = a~x+z, cens = delta~x+z, out = log(Y)~ x+z+ a+a:x))
 
+n_rep = 1000
+n_train = 1000
+n_test = 10000
+
 set.seed(2024)
-res_s8_1 = simAFT(100,1000, 1000, psi1, psi2, models, total_var = 1, treat_clust = T)
+res_s8_1 = simAFT(n_rep,n_train, n_test, psi1, psi2, models, total_var = 1, treat_clust = T)
 
-#Save output
-saveRDS(res_s8_1, file = "raw_results/s8_1.rds")
-
-res_s8_1$none$blip_plot
-res_s8_1$none$measures
-res_s8_1$none$inference
-#ggsave("blip.png", r, width=12, height = 12)
+print_res(res_s8_1, "s8_1", save = T, boxplot = F)
 
 #Large random effect
 set.seed(2024)
-res_s8_2 = simAFT(100,1000, 1000, psi1, psi2, models, total_var = 1, treat_clust = T, treat_re = "high")
+res_s8_2 = simAFT(n_rep,n_train, n_test, psi1, psi2, models, total_var = 1, treat_clust = T, treat_re = "high")
 
-#Save output
-saveRDS(res_s8_2, file = "raw_results/s8_2.rds")
-
-res_s8_2$none$blip_plot
-res_s8_2$none$measures
-res_s8_2$none$inference
+print_res(res_s8_2, "s8_2", save = T, boxplot = F)
 
 #Low random effect
 set.seed(2024)
-res_s8_3 = simAFT(100,1000, 1000, psi1, psi2, models, total_var = 1, treat_clust = T, treat_re = "low")
+res_s8_3 = simAFT(n_rep,n_train, n_test, psi1, psi2, models, total_var = 1, treat_clust = T, treat_re = "low")
 
-#Save output
-saveRDS(res_s8_3, file = "raw_results/s8_3.rds")
-
-res_s8_3$none$blip_plot
-res_s8_3$none$measures
-res_s8_3$none$inference
+print_res(res_s8_3, "s8_3", save = T, boxplot = F)
 ```
 
 
-```{r testing param estimation}
 
-psi1= c(0.6,-0.6)
-psi2= c(-0.6, -0.6)
-
-set.seed(2024)
-dat = sim_data(2000, psi1, psi2, total_var = 1, ICC = 0.9, nclust = 50)
-
-aft2 = function(data, treat.mod, cens.mod, outcome.mod, cause){
-  
-  #Treatment model and censoring model 
-  treat_mod = glm(treat.mod, data = data, family = binomial)
-  cens_mod = glm(cens.mod, data = data, family = binomial)
-  
-  treat_prob = predict(treat_mod, type = "response")
-  cens_prob = predict(cens_mod, type = "response")
-  
-  #Weights are wrong for censored observations but doesent matter since they are excluded
-  weights = abs(data$a - treat_prob)/cens_prob
-  
-  #Estimation of blip parameters via random effects AFT model
-  index = with(data, epsilon == cause & delta == 1)
-  data = data[index,]
-  w = weights[index]
-  
-  data = data %>% mutate(w = w)
-  
-  #Fitting GEE with exchangeable correlation structure, geeM package requires data.frame
-  
-  data = data %>% arrange(group) %>% as.data.frame()
-  model = geem(formula = outcome.mod, data = data, weights = w, id = group, corstr = "exchangeable")
-  
-  model
-  #coefs = coef(model)
-  
-  #coefs[grepl("a", names(coefs), fixed = T)]
-}
-
-m = list(treat = a~x+z, cens = delta~x+z, out = log(Y)~ x+ a+a:x)
-
-mod1 = aft2(dat, m$treat, m$cens, m$out, 1)
-mod2 = aft2(dat, m$treat, m$cens, m$out, 2)
-
-summary(mod1)
-summary(mod2)
-
-temp = dat %>% filter(epsilon == 1 & delta == 1)
-ggplot(data = temp) + geom_boxplot(aes(x = group, y = log(Y)))
-```
 
 
