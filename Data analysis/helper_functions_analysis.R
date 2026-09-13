@@ -174,7 +174,7 @@ AFT.boot = function(n_boot, data, models,save = F, file = "default", regime = "j
     cl = makeCluster(2)
     clusterEvalQ(cl,{
       library(tidyverse)
-      source("Scripts/CompetingRiskAFT.R")
+      source("helper_functions_analysis.R")
     })
     
     boot.est = parLapply(cl,1:n_boot, boot.est, data = data, models = models, groups = groups)

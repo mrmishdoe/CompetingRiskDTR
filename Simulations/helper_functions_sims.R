@@ -199,7 +199,7 @@ simAFT = function(n_rep, n_train, n_test, psi1, psi2, models, corstr = "exchange
     cl = makeCluster(5)
     clusterEvalQ(cl,{
       library(tidyverse)
-      source("RandomEffectsAFT_fast.R")
+      source("helper_functions_sims.R")
     })
     
     rep.est = function(i, models, corstr, n_train, ...){
